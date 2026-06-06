@@ -1,4 +1,5 @@
 const cloudinary = require('cloudinary').v2;
+const fs = require('fs');
 const Image = require('../models/Image');
 
 // Configure Cloudinary
@@ -8,22 +9,35 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
 exports.uploadImage = async (req, res) => {
+  let tempFilePath = null;
+
   try {
     if (!req.files || !req.files.image) {
-      return res.status(400).json({ message: 'No image file provided' });
+      return res.status(400).json({ success: false, message: 'No image file provided' });
     }
 
     const file = req.files.image;
+    tempFilePath = file.tempFilePath;
+
+    // Validate file type
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid file type. Allowed: JPEG, PNG, WebP, GIF' 
+      });
+    }
 
     // Upload to Cloudinary with compression
     const result = await cloudinary.uploader.upload(file.tempFilePath, {
       folder: 'gallery',
-      quality: 'auto:good', // Automatic quality optimization
-      fetch_format: 'auto', // Automatic format selection
+      quality: 'auto:good',
+      fetch_format: 'auto',
       transformation: [
-        { width: 1200, crop: 'limit' }, // Max width 1200px
-        { quality: '80' } // 80% quality
+        { width: 1200, crop: 'limit' },
+        { quality: '80' }
       ]
     });
 
@@ -33,25 +47,57 @@ exports.uploadImage = async (req, res) => {
       cloudinaryId: result.public_id
     });
 
-    await newImage.save();
+    try {
+      await newImage.save();
+    } catch (dbError) {
+      // Rollback: delete from Cloudinary if DB save fails
+      await cloudinary.uploader.destroy(result.public_id);
+      throw dbError;
+    }
 
-    res.json({
+    res.status(201).json({
       success: true,
       url: result.secure_url,
       message: 'Image uploaded successfully'
     });
 
   } catch (error) {
-    res.status(500).json({ message: 'Upload failed', error: error.message });
+    console.error('Upload error:', error.message);
+    res.status(500).json({ success: false, message: 'Upload failed' });
+  } finally {
+    // Clean up temp file
+    if (tempFilePath) {
+      fs.unlink(tempFilePath, (err) => {
+        if (err) console.error('Temp file cleanup failed:', err.message);
+      });
+    }
   }
 };
 
 exports.getAllImages = async (req, res) => {
   try {
-    const images = await Image.find().sort({ uploadedAt: -1 });
-    res.json({ success: true, images });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const [images, total] = await Promise.all([
+      Image.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Image.countDocuments()
+    ]);
+
+    res.json({ 
+      success: true, 
+      images,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching images', error: error.message });
+    console.error('Fetch images error:', error.message);
+    res.status(500).json({ success: false, message: 'Error fetching images' });
   }
 };
 
@@ -59,7 +105,7 @@ exports.deleteImage = async (req, res) => {
   try {
     const image = await Image.findById(req.params.id);
     if (!image) {
-      return res.status(404).json({ message: 'Image not found' });
+      return res.status(404).json({ success: false, message: 'Image not found' });
     }
 
     // Delete from Cloudinary
@@ -70,6 +116,7 @@ exports.deleteImage = async (req, res) => {
 
     res.json({ success: true, message: 'Image deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting image', error: error.message });
+    console.error('Delete image error:', error.message);
+    res.status(500).json({ success: false, message: 'Error deleting image' });
   }
 };

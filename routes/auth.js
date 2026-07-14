@@ -61,5 +61,10 @@ router.patch(
   authController.rejectTeacher
 );
 
+router.get(
+    '/me',
+    authMiddleware,
+    authController.getCurrentUser
+);
 
 module.exports = router;

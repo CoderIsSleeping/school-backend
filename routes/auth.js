@@ -5,6 +5,7 @@ const router = express.Router();
 
 const authController = require('../controllers/authController');
 const authMiddleware = require('../middleware/auth');
+const adminMiddleware = require('../middleware/admin');
 
 
 const loginLimiter = rateLimit({
@@ -37,6 +38,27 @@ router.post(
   '/change-password',
   authMiddleware,
   authController.changePassword
+);
+
+router.get(
+  '/pending-teachers',
+  authMiddleware,
+  adminMiddleware,
+  authController.getPendingTeachers
+);
+
+router.patch(
+  '/approve/:id',
+  authMiddleware,
+  adminMiddleware,
+  authController.approveTeacher
+);
+
+router.patch(
+  '/reject/:id',
+  authMiddleware,
+  adminMiddleware,
+  authController.rejectTeacher
 );
 
 

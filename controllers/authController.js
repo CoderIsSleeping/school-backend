@@ -231,5 +231,102 @@ exports.changePassword = async (req, res) => {
       success: false,
       message: 'Server error'
     });
+
+    // ========================
+// GET PENDING TEACHERS
+// ========================
+exports.getPendingTeachers = async (req, res) => {
+  try {
+    const teachers = await User.find({
+      role: 'teacher',
+      status: 'pending'
+    }).select('-password');
+
+    res.json({
+      success: true,
+      teachers
+    });
+
+  } catch (error) {
+    console.error('Fetch pending teachers error:', error.message);
+
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching pending teachers'
+    });
+  }
+};
+
+
+// ========================
+// APPROVE TEACHER
+// ========================
+exports.approveTeacher = async (req, res) => {
+  try {
+    const teacher = await User.findOne({
+      _id: req.params.id,
+      role: 'teacher'
+    });
+
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: 'Teacher not found'
+      });
+    }
+
+    teacher.status = 'approved';
+    await teacher.save();
+
+    res.json({
+      success: true,
+      message: 'Teacher approved successfully'
+    });
+
+  } catch (error) {
+    console.error('Approve teacher error:', error.message);
+
+    res.status(500).json({
+      success: false,
+      message: 'Error approving teacher'
+    });
+  }
+};
+
+
+// ========================
+// REJECT TEACHER
+// ========================
+exports.rejectTeacher = async (req, res) => {
+  try {
+    const teacher = await User.findOne({
+      _id: req.params.id,
+      role: 'teacher'
+    });
+
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: 'Teacher not found'
+      });
+    }
+
+    teacher.status = 'rejected';
+    await teacher.save();
+
+    res.json({
+      success: true,
+      message: 'Teacher rejected successfully'
+    });
+
+  } catch (error) {
+    console.error('Reject teacher error:', error.message);
+
+    res.status(500).json({
+      success: false,
+      message: 'Error rejecting teacher'
+    });
+  }
+};
   }
 };

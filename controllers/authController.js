@@ -2,125 +2,234 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+// ========================
+// LOGIN
+// ========================
 exports.login = async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    // Input validation
     if (!username || !password) {
-      return res.status(400).json({ success: false, message: 'Username and password are required' });
+      return res.status(400).json({
+        success: false,
+        message: 'Username and password are required'
+      });
     }
 
     if (typeof username !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ success: false, message: 'Invalid input types' });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid input types'
+      });
     }
 
-    // Find user
     const user = await User.findOne({ username });
+
     if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials' });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
     }
 
-    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
+
     if (!isMatch) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials' });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
     }
 
-    // Create token
+    // Teachers cannot login until approved
+    if (user.role === 'teacher' && user.status === 'pending') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account is waiting for admin approval'
+      });
+    }
+
+    if (user.role === 'teacher' && user.status === 'rejected') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your registration request has been rejected'
+      });
+    }
+
     const token = jwt.sign(
-      { id: user._id, username: user.username },
+      {
+        id: user._id,
+        username: user.username,
+        role: user.role
+      },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    res.json({ 
+    res.json({
       success: true,
       token,
-      username: user.username 
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        username: user.username,
+        role: user.role
+      }
     });
 
   } catch (error) {
     console.error('Login error:', error.message);
-    res.status(500).json({ success: false, message: 'Server error' });
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
   }
 };
 
-// Protected: Only existing admins can create new users
-exports.createUser = async (req, res) => {
+
+// ========================
+// TEACHER REGISTRATION
+// ========================
+exports.registerTeacher = async (req, res) => {
   try {
-    const { username, password } = req.body;
-    
-    // Input validation
-    if (!username || !password) {
-      return res.status(400).json({ success: false, message: 'Username and password are required' });
+    const { name, email, username, password } = req.body;
+
+    if (!name || !email || !username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email, username and password are required'
+      });
     }
 
-    if (typeof username !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ success: false, message: 'Invalid input types' });
+    if (
+      typeof name !== 'string' ||
+      typeof email !== 'string' ||
+      typeof username !== 'string' ||
+      typeof password !== 'string'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid input types'
+      });
     }
 
-    // Password strength validation
     if (password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
     }
 
-    // Check if username already exists
-    const existingUser = await User.findOne({ username });
-    if (existingUser) {
-      return res.status(409).json({ success: false, message: 'Username already exists' });
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    const user = new User({
-      username,
-      password: hashedPassword
+    const existingUser = await User.findOne({
+      $or: [
+        { username: username.trim() },
+        { email: email.toLowerCase().trim() }
+      ]
     });
 
-    await user.save();
-    res.status(201).json({ success: true, message: 'User created successfully' });
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'Username or email already registered'
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const teacher = new User({
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      username: username.trim(),
+      password: hashedPassword,
+      role: 'teacher',
+      status: 'pending'
+    });
+
+    await teacher.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful. Please wait for admin approval.'
+    });
+
   } catch (error) {
-    console.error('Create user error:', error.message);
-    res.status(500).json({ success: false, message: 'Error creating user' });
+    console.error('Registration error:', error.message);
+
+    res.status(500).json({
+      success: false,
+      message: 'Registration failed'
+    });
   }
 };
 
+
+// ========================
+// CHANGE PASSWORD
+// ========================
 exports.changePassword = async (req, res) => {
   try {
     const userId = req.user.id;
     const { currentPassword, newPassword } = req.body;
 
-    // Input validation
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ success: false, message: 'Current password and new password are required' });
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required'
+      });
     }
 
     if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
-      return res.status(400).json({ success: false, message: 'Invalid input types' });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid input types'
+      });
     }
 
-    // Password strength validation
     if (newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters' });
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters'
+      });
     }
 
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // Check current password
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch)
-      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
 
-    // Hash new password
+    const isMatch = await bcrypt.compare(
+      currentPassword,
+      user.password
+    );
+
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+
     user.password = await bcrypt.hash(newPassword, 10);
+
     await user.save();
 
-    res.json({ success: true, message: 'Password changed successfully' });
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+
   } catch (error) {
     console.error('Change password error:', error.message);
-    res.status(500).json({ success: false, message: 'Server error' });
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
   }
 };

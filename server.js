@@ -3,7 +3,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const mongoSanitize = require('express-mongo-sanitize');
 const fileUpload = require('express-fileupload');
 require('dotenv').config();
 const connectDB = require('./config/db');
@@ -41,7 +40,6 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Sanitize inputs against NoSQL injection
-app.use(mongoSanitize());
 
 // File Upload
 app.use(fileUpload({

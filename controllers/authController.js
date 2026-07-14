@@ -231,6 +231,8 @@ exports.changePassword = async (req, res) => {
       success: false,
       message: 'Server error'
     });
+  }
+};
 
     // ========================
 // GET PENDING TEACHERS
@@ -326,7 +328,5 @@ exports.rejectTeacher = async (req, res) => {
       success: false,
       message: 'Error rejecting teacher'
     });
-  }
-};
   }
 };

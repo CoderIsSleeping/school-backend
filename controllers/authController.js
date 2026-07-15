@@ -94,7 +94,9 @@ exports.login = async (req, res) => {
 // ========================
 exports.registerTeacher = async (req, res) => {
   try {
-    const { name, email, username, password } = req.body;
+    const { name, email, password } = req.body;
+
+    const username= email.toLowerCase().trim();
 
     if (!name || !email || !username || !password) {
       return res.status(400).json({
@@ -123,10 +125,7 @@ exports.registerTeacher = async (req, res) => {
     }
 
     const existingUser = await User.findOne({
-      $or: [
-        { username: username.trim() },
-        { email: email.toLowerCase().trim() }
-      ]
+         email: email.toLowerCase().trim()
     });
 
     if (existingUser) {
@@ -141,7 +140,7 @@ exports.registerTeacher = async (req, res) => {
     const teacher = new User({
       name: name.trim(),
       email: email.toLowerCase().trim(),
-      username: username.trim(),
+      username,
       password: hashedPassword,
       role: 'teacher',
       status: 'pending'
